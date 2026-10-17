@@ -9,6 +9,6 @@ google-genai==2.8.0
 
 # Hosting (Render + Neon Postgres)
 gunicorn==23.0.0
-psycopg2-binary==2.9.10
+psycopg[binary]==3.3.6
 
 python-dotenv==1.0.1

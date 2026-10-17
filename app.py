@@ -38,7 +38,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 load_dotenv()
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///models.db')
+# name the psycopg (v3) driver so it works on SQLAlchemy 2.0 and 2.1 alike
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///models.db').replace('postgresql://', 'postgresql+psycopg://', 1)
 db.init_app(app)
 
 # runs at import so gunicorn creates tables too
