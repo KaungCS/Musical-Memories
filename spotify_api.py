@@ -161,7 +161,15 @@ class SpotifyClient:
             token_data = self.refresh_access_token()
             return token_data["access_token"]
 
-        raise RuntimeError("There is no valid access token. User must log in.")
+        # no user login (e.g. guests): use an app-only token, enough for search
+        response = requests.post(
+            self.token_url,
+            headers=self.get_auth_header(),
+            data={"grant_type": "client_credentials"}
+        )
+        response.raise_for_status()
+        self.save_tokens(response.json())
+        return self.access_token
 
     # fetch track data and extract uris for web player
     def search_track(self, query):

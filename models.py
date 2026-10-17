@@ -948,3 +948,38 @@ def get_pending_inbound(user_id):
             pending.append(requester)
     
     return pending
+
+def delete_user_data(user_id, upload_folder=None):
+    """
+    Deletes a user and everything they created: their entries (and photos),
+    calendars they own (with all entries/memberships in them), their
+    memberships, friendships and Spotify tokens. Used to clean up guests.
+
+    Args:
+        user_id (str): the user to wipe
+        upload_folder (str): folder that entry photos are stored in
+    """
+    owned_ids = [c.id for c in Calendar.query.filter_by(owner_id=user_id).all()]
+    entries = Entry.query.filter(
+        db.or_(Entry.user_id == user_id, Entry.calendar_id.in_(owned_ids))).all()
+
+    for entry in entries:
+        if entry.photo_path:
+            full_path = os.path.join(upload_folder, entry.photo_path) if upload_folder else entry.photo_path
+            try:
+                os.remove(full_path)
+            except OSError as e:
+                print(f'Photo deletion failed: {e}')
+        db.session.delete(entry)
+
+    # children before parents so Postgres foreign keys are satisfied
+    CalendarMembership.query.filter(db.or_(
+        CalendarMembership.user_id == user_id,
+        CalendarMembership.calendar_id.in_(owned_ids))).delete(synchronize_session=False)
+    Calendar.query.filter(Calendar.id.in_(owned_ids)).delete(synchronize_session=False)
+    Friendship.query.filter(db.or_(
+        Friendship.requester_id == user_id,
+        Friendship.receiver_id == user_id)).delete(synchronize_session=False)
+    SpotifyToken.query.filter_by(user_id=user_id).delete()
+    User.query.filter_by(id=user_id).delete()
+    db.session.commit()

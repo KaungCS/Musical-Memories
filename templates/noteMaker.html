@@ -54,6 +54,9 @@
                             <div class="border rounded d-flex flex-column align-items-center justify-content-center bg-darker text-light p-3">
                                 <label class="form-label fw-semibold text-muted mb-2">Photo</label>
                                 {{ form.photo(class="form-control") }}
+                                {% if session.user_id and session.user_id.startswith('guest_') %}
+                                <small class="text-muted mt-2">Demo mode: photos aren't kept and will disappear on their own.</small>
+                                {% endif %}
                             </div>
                         </div>
                     </div>

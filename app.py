@@ -1,5 +1,5 @@
 import os
-import git
+import uuid
 from flask import Flask, render_template, url_for,redirect, request, session, jsonify, flash
 from datetime import datetime, date
 from forms.note_maker_form import NoteMakerForm
@@ -13,7 +13,7 @@ from models import (
     get_pending_inbound, cancel_request, get_display_name,
     Calendar, get_or_create_personal_calendar, get_user_calendars,
     is_calendar_member, join_calendar_by_code, create_calendar,
-    get_calendar_by_id, get_all_by_calendar, delete_calendar
+    get_calendar_by_id, get_all_by_calendar, delete_calendar, delete_user_data
 )
 from database import db
 
@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from models import SpotifyToken, save_spotify_tokens, get_spotify_tokens, delete_spotify_tokens, User, toggle_reduced_motion
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = 'overly=secure-token-4-testin@' #change this when pushing to server
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'overly=secure-token-4-testin@')
 
 UPLOAD_FOLDER = os.path.join(app.root_path, 'static', 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -38,8 +38,12 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 load_dotenv()
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///models.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///models.db')
 db.init_app(app)
+
+# runs at import so gunicorn creates tables too
+with app.app_context():
+    db.create_all()
 
 
 def login_required(f):
@@ -103,6 +107,8 @@ def home():
     Returns:
         HTML: Renders home.html
     """
+    if "user_id" in session:
+        return redirect(url_for("calendar"))
     return render_template('home.html',subtitle='Home Page', text='This is the home page')
 
 
@@ -161,6 +167,27 @@ def spotify_callback():
     return redirect("/calendar")
 
 
+@app.route("/login/guest")
+def guest_login():
+    """
+    Creates a throwaway guest user so people can demo the app without Spotify.
+    The session cookie lasts 31 days; logging out deletes the guest's data.
+
+    Returns:
+        Redirect: Sends the guest to the calendar page
+    """
+    user_id = "guest_" + uuid.uuid4().hex
+    user = get_or_create_user(user_id, "Guest")
+
+    session.permanent = True
+    session["user_id"] = user_id
+    session["username"] = user.username
+    session["reduced_motion"] = user.reduced_motion
+    session["active_calendar_id"] = get_or_create_personal_calendar(user_id).id
+
+    return redirect("/calendar")
+
+
 @app.route("/logout")
 def logout():
     """
@@ -170,7 +197,9 @@ def logout():
         Redirect: Sends user back to home
     """
     user_id = session.get("user_id")
-    if user_id:
+    if user_id and user_id.startswith("guest_"):
+        delete_user_data(user_id, upload_folder=app.config['UPLOAD_FOLDER'])
+    elif user_id:
         delete_spotify_tokens(user_id)
     session.clear()
     return redirect(url_for("home"))
@@ -197,26 +226,8 @@ def search_song():
     if not user_id:
         return jsonify([])
 
-    token_data = get_spotify_tokens(user_id)
-
-    if token_data is None:
-        return jsonify([])
-    # resets tokens, but needed to call search_track
-    spotify = SpotifyClient()
-
-    # database tokens back into spotify client
-    spotify.access_token = token_data["access_token"]
-    spotify.refresh_token = token_data["refresh_token"]
-    spotify.expires_at = token_data["expires_at"]
-
-    songs = spotify.search_track(query)
-
-    # access token might have been refreshed so we need to save new/current tokens in db
-    save_spotify_tokens(user_id, {
-        "access_token": spotify.access_token,
-        "refresh_token": spotify.refresh_token,
-        "expires_at": spotify.expires_at
-    })
+    # app-only token, so guests and logged-in users search the same way
+    songs = SpotifyClient().search_track(query)
 
     return jsonify(songs)
 
@@ -574,39 +585,20 @@ def note(entry_id):
         s_generator = SongGenerator()
         recs = s_generator.get_songs(entry.song_name, entry.journal_text, entry.location_name)
 
-    # uses Spotify API to search Spotify for the songs from Gemini
-    # load in spotify tokens from user
-    token_data = get_spotify_tokens(user_id)
+    # uses Spotify API (app-only token) to search Spotify for the songs from Gemini
+    spotify = SpotifyClient()
     songs = []
-    saved_track_id = None
 
-    if token_data is None:
-        songs = []
-    else:
-        # if token data exists we put in the saved spotify token data into the fresh spotify client so we can search tracks
-        spotify = SpotifyClient()
+    # look up the saved song directly instead of parsing spotify_link
+    saved_results = spotify.search_track(f"{entry.song_name} {entry.artist_name}")
+    saved_track_id = saved_results[0]['uri'].split(':')[-1] if saved_results else None
 
-        spotify.access_token = token_data["access_token"]
-        spotify.refresh_token = token_data["refresh_token"]
-        spotify.expires_at = token_data["expires_at"]
-
-        # look up the saved song directly instead of parsing spotify_link
-        saved_results = spotify.search_track(f"{entry.song_name} {entry.artist_name}")
-        saved_track_id = saved_results[0]['uri'].split(':')[-1] if saved_results else None
-
-        for rec in recs:
-            results = spotify.search_track(f"{rec['name']} {rec['artist']}")
-            track_id = results[0]['uri'].split(':')[-1]
-            songs.append({
-                "name": rec['name'],
-                "artist": rec['artist'],
-                "track_id": track_id
-            })
-
-        save_spotify_tokens(user_id, {
-            "access_token": spotify.access_token,
-            "refresh_token": spotify.refresh_token,
-            "expires_at": spotify.expires_at
+    for rec in recs:
+        results = spotify.search_track(f"{rec['name']} {rec['artist']}")
+        songs.append({
+            "name": rec['name'],
+            "artist": rec['artist'],
+            "track_id": results[0]['uri'].split(':')[-1] if results else None
         })
 
     note_data["track_id"] = saved_track_id
@@ -1096,17 +1088,5 @@ def user_preview_data(username):
     })
 
 
-@app.route("/update_server", methods=['POST'])
-def webhook():
-    if request.method == 'POST':
-        repo = git.Repo('/home/musicalmemories/Musical-Memories')
-        origin = repo.remotes.origin
-        origin.pull()
-        return 'Updated PythonAnywhere successfully', 200
-    else:
-        return 'Wrong event type', 400
-
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(host='0.0.0.0', port=5000, debug=True)

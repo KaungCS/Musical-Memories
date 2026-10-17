@@ -7,6 +7,14 @@ import urllib.parse
 
 class TestSpotifyClient(unittest.TestCase):
 
+    @patch("spotify_api.requests.post")
+    def test_no_user_token_falls_back_to_app_token(self, mock_post):
+        mock_post.return_value.json.return_value = {"access_token": "app_token", "expires_in": 3600}
+        spotify = SpotifyClient()
+
+        self.assertEqual(spotify.get_valid_access_token(), "app_token")
+        self.assertEqual(mock_post.call_args.kwargs["data"], {"grant_type": "client_credentials"})
+
     # by pass generate string function
     @patch('spotify_api.SpotifyClient.generate_random_string')
     def test_build_user_login_url(self, mock_generate_string):

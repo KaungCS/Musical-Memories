@@ -48,6 +48,16 @@ Users are able to log  in with Spotify, search for songs, save songs as memories
 Users log in with Spotify and can create musical memories tied to a specific date. Each memory can include a song, artist, album image, journal text, location, and photo.
 Musical Memories supports multiple entries per day and shared calendars.
 
+## Deploying
+
+The app runs on Render (web) with a Neon Postgres database. Visitors can click "Try as guest" without a Spotify account; logging out deletes the guest's data. To deploy or redeploy, run the setup wizard from the repo root:
+
+```
+bash scripts/deploy-wizard.sh
+```
+
+It walks you through the Spotify, Mapbox, Gemini, Neon and Render dashboards, writes local values to `.env`, and checks the live site at the end.
+
 ## Demo
 
 
