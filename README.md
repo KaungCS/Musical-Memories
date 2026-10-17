@@ -60,4 +60,42 @@ It walks you through the Spotify, Mapbox, Gemini, Neon and Render dashboards, wr
 
 ## Demo
 
+Click **Try as guest** to explore without a Spotify account.
+
+![Home page with Login with Spotify and Try as guest](docs/screenshots/home.png)
+
+### Calendar
+Each day you save a song shows its album art.
+
+| Dark mode | Light mode |
+|---|---|
+| ![Calendar in dark mode](docs/screenshots/calendar.png) | ![Calendar in light mode](docs/screenshots/calendar-light.png) |
+
+### Saving a memory
+Search Spotify, pick a song, drop a pin, and write a note.
+
+![Note maker with Spotify search results](docs/screenshots/note-maker.png)
+
+### Note page
+Play the song, read the note, and get Gemini-powered recommendations for songs with the same feel.
+
+![Note page with Spotify player and recommendations](docs/screenshots/note.png)
+
+### Timeline and day view
+
+| Timeline | Entries for a day |
+|---|---|
+| ![Timeline of memories](docs/screenshots/timeline.png) | ![All entries for one day](docs/screenshots/day.png) |
+
+### Map
+Every memory with a location becomes a pin.
+
+![Map of memory locations](docs/screenshots/map.png)
+
+### On This Day and Profile
+
+| On This Day | Profile |
+|---|---|
+| ![On This Day memories from past years](docs/screenshots/on-this-day.png) | ![Profile with friends and stats](docs/screenshots/profile.png) |
+
 
